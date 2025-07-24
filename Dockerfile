@@ -30,4 +30,4 @@ RUN conda clean -qafy
 
 # Activate the new conda environment and install poetry
 SHELL ["/opt/conda/bin/conda", "run", "-n", "PROJECT_NAME", "/bin/bash", "-c"]
-RUN poetry install --no-root
+# RUN poetry install --no-root
