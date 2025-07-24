@@ -1,0 +1,30 @@
+project_name: ai-fusion-bal-scheduler
+model:
+  bal-from-scratch: # download TGLF-SINN checkpoint
+    command: >-
+      [](make download file=tglf_sumf_data_full_madcut_filter/train_filtered/tglfnn_DB_sat2_em_azf-1_RLNS_12_+1_azf-1_processed.h5;) python train.py; make upload file=;
+    gpu_count: 1
+    memory: 30
+    cpu_count: 4
+    ephemeral_storage: 200
+  bal-from-checkpoint: # download TGLF-SINN checkpoint AND last CGYRO-NN checkpoint
+    command: >-
+      [](make download file=tglf_sumf_data_full_madcut_filter/train_filtered/tglfnn_DB_sat2_em_azf-1_RLNS_12_+1_azf-1_processed.h5;) python train.py; make upload file=;
+    gpu_count: 1
+    memory: 30
+    cpu_count: 4
+    ephemeral_storage: 200
+dataset:
+  initial-dataset:
+    hparam:
+      # Launch will automatically consider all combinations of hparam
+      # hparam preceded by _ will NOT appear in the job name
+      # If your hparam contain special characters, you must _ them
+      _dump-dir: ["./initial-training-run"]
+      _project: ["SR"]
+      _cn: [SR]
+      _asinh_accumulate: [True]
+      _normalize_mse_loss: [False]
+      _random_loss: [False]
+run:
+  model: [bal-from-scratch]

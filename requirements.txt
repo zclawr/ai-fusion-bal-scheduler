@@ -1,0 +1,9 @@
+omfit_classes
+numpy<=2.0.0
+uncertainties
+pexpect
+scipy<1.14.0
+omas
+xarray<=v2022.10.0
+matplotlib<3.5.3
+pygacode
