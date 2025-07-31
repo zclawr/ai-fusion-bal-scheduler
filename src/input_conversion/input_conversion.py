@@ -1,5 +1,6 @@
 import os
 import subprocess
+import numpy as np
 
 def run_pyro_convert(input_path: str, output_dir: str, output_filename: str) -> None:
     """
@@ -27,8 +28,7 @@ def run_pyro_convert(input_path: str, output_dir: str, output_filename: str) -> 
     if result.returncode != 0:
         raise RuntimeError(f"Command failed:\n{result.stderr}")
     else:
-        print(f"Conversion successful. Output saved to {output_path}")
-
+        print(f"Conversion successful. Output saved to {output_path}")    
 
 if __name__ == "__main__":
     run_pyro_convert(

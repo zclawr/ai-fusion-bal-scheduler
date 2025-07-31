@@ -51,29 +51,6 @@ KY_LOCS = [0.06010753, 0.12021505, 0.18032258, 0.2404301, 0.30053763, 0.54096774
   1.20215052, 1.5988144, 2.12677655, 2.82962789, 3.76547314, 5.01177679,
   6.67183152, 8.88339377, 11.8302146, 15.75743919, 20.99217655, 27.97098031]
 
-def get_dists(json_path):
-    with open(json_path, 'r') as file:
-        input_dists = json.load(file)
-    return input_dists
-
-def sample_input(json_path, as_vector=True):
-    sampled = {}
-    with open(json_path, 'r') as file:
-        input_dists = json.load(file)
-
-    for input_name in input_dists:
-        dist = input_dists[input_name]
-        mean, std = dist['mean'], dist['std']
-        sample = np.random.normal(mean, std)
-        # if("_log10" in input_name):
-        #     input_name = input_name[:-len('_log10')]
-        #     sample = 10 ** sample
-        sampled[input_name] = sample
-
-    if as_vector:
-        return to_vector(sampled)
-    return sampled
-
 def to_vector(input_dict):
     vec = np.zeros(shape=(len(input_dict)))
     i = 0

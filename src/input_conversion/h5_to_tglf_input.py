@@ -60,6 +60,11 @@ input_keys = [
 
 log_ops_keys = {"BETAE_log10", "XNUE_log10", "DEBYE_log10"}
 
+avg_ky_locs = [0.06010753, 0.12021505, 0.18032258, 0.2404301, 0.30053763, 0.54096774,
+  0.66118279, 0.78139784, 0.90161289, 1.02182795, 1.142043, 1.26225805,
+  1.20215052, 1.5988144, 2.12677655, 2.82962789, 3.76547314, 5.01177679,
+  6.67183152, 8.88339377, 11.8302146, 15.75743919, 20.99217655, 27.97098031]
+
 import os
 import h5py
 from datetime import datetime
@@ -107,6 +112,20 @@ FIXED_TRAILER_TEMPLATE = textwrap.dedent("""\
     ZS_3=6.0
 """)
 
+CGYRO_OVERRIDE_VALUES = {
+    'N_ENERGY':8,
+    'N_XI':24,
+    'N_THETA':24,
+    'N_RADIAL':16,
+    'N_TOROIDAL':1,
+    'NONLINEAR_FLAG':0,
+    'BOX_SIZE':1,
+    'DELTA_T':0.005,
+    'MAX_TIME':100000.0,
+    'PRINT_STEP':100,
+    'THETA_PLOT': 1
+}
+
 def write_input_tglf(f, sample_idx, ky_idx, out_dir):
     with open(os.path.join(out_dir, "input.tglf"), "w") as f_out:
         f_out.write("# Geometry (Miller) and Parameters\n")
@@ -151,8 +170,81 @@ def convert_h5_to_tglf_dirs(h5_path, out_root="tglf_outputs"):
 
     print(f"✅ Done. TGLF input files written to: {main_dir}")
 
+def override_cgyro_numerics(f_path, ky_val):
+    overrides = CGYRO_OVERRIDE_VALUES
+    if ky_val > 1 and ky_val <= 10:
+        # Non ion-scale, finer timesteps and less frequent printing
+        overrides['DELTA_T'] = 0.001
+        overrides['PRINT_STEP'] = 250
+    elif ky_val > 10:
+        # Much finer timesteps, very infrequent printing
+        overrides['DELTA_T'] = 0.0005
+        overrides['PRINT_STEP'] = 500
 
+    with open(f_path, 'r') as f:
+        lines = f.readlines()
+        f.close()
+    newlines = []
+    for line in lines:
+        foundKey = False
+        for key in overrides:
+            if key in line:
+                newline = f'{key} = {overrides[key]}\n'
+                foundKey = True
+                break
+        if not foundKey:
+            newline = line
+        newlines.append(newline)
 
-# === Run ===
-h5_file = "sampled_output_file.h5"  # replace with actual file
-convert_h5_to_tglf_dirs(h5_file)
+    with open(f_path, 'w') as f:
+        for line in newlines:
+            f.write(line)
+        f.close()
+    return
+
+def write_input_tglf_from_arr(input_arr, ky_val, out_dir):
+    with open(os.path.join(out_dir, "input.tglf"), "w") as f_out:
+        f_out.write("# Geometry (Miller) and Parameters\n")
+        for i in range(len(input_keys)):
+            key = input_keys[i]
+            val = input_arr[i]
+            if key in log_ops_keys:
+                val = 10 ** val
+                key_out = key.replace("_log10", "")
+            else:
+                key_out = key
+
+            f_out.write(f"{key_out}={val:+.5E}\n")
+
+        trailer = FIXED_TRAILER_TEMPLATE.format(ky_val=f"{ky_val:+.5E}")
+        f_out.write("\n" + trailer + "\n")
+
+def generate_tglf_and_cgyro_from_arr(input_arr, ky_val, out_dir, species_to_enforce_qn='ion2'):
+    write_input_tglf_from_arr(input_arr, ky_val, out_dir)
+    pyro = Pyro(gk_file=os.path.join(out_dir, "input.tglf"))
+    # ion2 corresponds to the subdominant ion (Carbon)
+    pyro.local_species.enforce_quasineutrality(species_to_enforce_qn)
+    f_path = os.path.join(out_dir, "input.cgyro")
+    pyro.write_gk_file(f_path, gk_code="CGYRO", enforce_quasineutrality=True)
+    override_cgyro_numerics(f_path, ky_val)
+
+def convert_numpy_to_tglf_dirs(samples, n_ky, out_root="tglf_outputs"):
+    os.makedirs(out_root, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    main_dir = os.path.join(out_root, f"tglf_input_{timestamp}")
+    os.makedirs(main_dir, exist_ok=True)
+    
+    n_samples = samples.shape[0]
+    
+    for sample_idx in range(n_samples):
+        sample_dir = os.path.join(main_dir, f"sample_{sample_idx}")
+        os.makedirs(sample_dir, exist_ok=True)
+
+        sample = samples[sample_idx]
+        for ky_idx in range(n_ky):
+            ky_val = avg_ky_locs[ky_idx]
+            ky_dir = os.path.join(sample_dir, f"ky_{ky_idx}")
+            os.makedirs(ky_dir, exist_ok=True)
+            generate_tglf_and_cgyro_from_arr(sample, ky_val, ky_dir)
+
+    print(f"✅ Done. TGLF input files written to: {main_dir}")
