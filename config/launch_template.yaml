@@ -1,5 +1,19 @@
 project_name: ai-fusion-bal-scheduler
 model:
+  load-outputs-and-parse: 
+    command: >-
+      [](make download file=<s3path>;) cd src/; python parse_and_save_outputs.py -d ../<s3path> -o ../<s3path>/parsed.h5; cd ../; make upload file=<s3path>/parsed.h5;
+    gpu_count: 0
+    memory: 30
+    cpu_count: 2
+    ephemeral_storage: 100
+  load-inputs-and-parse: 
+    command: >-
+      [](make download file=<s3path>;) cd src/; python parse_input_candidates.py -f ../<s3path> -0 ../<s3path>/expanded/; cd ../; make upload file=<s3path>/expanded/;
+    gpu_count: 0
+    memory: 30
+    cpu_count: 2
+    ephemeral_storage: 100
   bal-from-scratch: # download TGLF-SINN checkpoint
     command: >-
       [](make download file=tglf_sumf_data_full_madcut_filter/train_filtered/tglfnn_DB_sat2_em_azf-1_RLNS_12_+1_azf-1_processed.h5;) python train.py; make upload file=;
@@ -14,17 +28,3 @@ model:
     memory: 30
     cpu_count: 4
     ephemeral_storage: 200
-dataset:
-  initial-dataset:
-    hparam:
-      # Launch will automatically consider all combinations of hparam
-      # hparam preceded by _ will NOT appear in the job name
-      # If your hparam contain special characters, you must _ them
-      _dump-dir: ["./initial-training-run"]
-      _project: ["SR"]
-      _cn: [SR]
-      _asinh_accumulate: [True]
-      _normalize_mse_loss: [False]
-      _random_loss: [False]
-run:
-  model: [bal-from-scratch]

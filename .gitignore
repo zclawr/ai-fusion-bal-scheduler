@@ -1,1 +1,10 @@
 .env
+*.h5
+*.npy
+*.cgyro
+*.tglf
+*/__pycache__
+*/*/__pycache__
+src/output_parsing/OMFIT-source
+data/
+*.pkl

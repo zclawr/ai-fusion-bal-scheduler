@@ -850,6 +850,7 @@ def flux_integrals(
     stress_par_out,
     exchange_out,
     q_low_out,
+    sum_flux_spectrum_out,
     taus_1=1.0,
     mass_2=1.0,
 ):
@@ -868,9 +869,10 @@ def flux_integrals(
                     dky0 * (0 if i == 0 else parallel_stress[i - 1][nm][ns][j]) + dky1 * parallel_stress[i][nm][ns][j]
                 )
                 exchange_out[nm][ns][j] += dky0 * (0 if i == 0 else exchange[i - 1][nm][ns][j]) + dky1 * exchange[i][nm][ns][j]
+                sum_flux_spectrum_out[i, nm, ns, j, :] = [particle_flux_out[nm][ns][j], energy_flux_out[nm][ns][j], stress_tor_out[nm][ns][j], stress_par_out[nm][ns][j], exchange_out[nm][ns][j]]
             if ky * taus_1 * mass_2 <= 1:
                 q_low_out[nm][ns] = energy_flux_out[nm][ns][0] + energy_flux_out[nm][ns][1]
-    return particle_flux_out, energy_flux_out, stress_tor_out, stress_par_out, exchange_out, q_low_out
+    return particle_flux_out, energy_flux_out, stress_tor_out, stress_par_out, exchange_out, q_low_out, sum_flux_spectrum_out
 
 
 def sum_ky_spectrum(
@@ -949,6 +951,7 @@ def sum_ky_spectrum(
             * exchange_flux_integral: [nm, ns, nf]
     '''
     phi_bar_sum_out = 0
+    NKY = len(energy_QL[:, 0, 0, 0])  # get the number of fields
     NM = len(energy_QL[0, :, 0, 0])  # get the number of modes
     NS = len(energy_QL[0, 0, :, 0])  # get the number of species
     NF = len(energy_QL[0, 0, 0, :])  # get the number of fields
@@ -958,6 +961,7 @@ def sum_ky_spectrum(
     stress_par_out = np.zeros((NM, NS, NF))
     exchange_out = np.zeros((NM, NS, NF))
     q_low_out = np.zeros((NM, NS))
+    sum_flux_spectrum_out = np.zeros((NKY, NM, NS, NF, 5))
 
     QLA_P = 1
     QLA_E = 1
@@ -1015,7 +1019,7 @@ def sum_ky_spectrum(
             dky1 = ky1 * (1.0 - ky0 * dky)
             dky0 = ky0 * (ky1 * dky - 1.0)
 
-        particle_flux_out, energy_flux_out, stress_tor_out, stress_par_out, exchange_out, q_low_out = flux_integrals(
+        particle_flux_out, energy_flux_out, stress_tor_out, stress_par_out, exchange_out, q_low_out, sum_flux_spectrum_out = flux_integrals(
             NM,
             NS,
             NF,
@@ -1034,6 +1038,7 @@ def sum_ky_spectrum(
             stress_par_out,
             exchange_out,
             q_low_out,
+            sum_flux_spectrum_out,
         )
         ky0 = ky1
         results = {
@@ -1042,6 +1047,7 @@ def sum_ky_spectrum(
             "toroidal_stresses_integral": stress_tor_out,
             "parallel_stresses_integral": stress_par_out,
             "exchange_flux_integral": exchange_out,
+            "sum_flux_spectrum": sum_flux_spectrum_out
         }
     return results
 
@@ -1118,6 +1124,7 @@ def calculate_QLGYRO_flux(runid, cgyro_freq, cgyro_ql, tglf_growth, sat_rule_in,
     QL_data = cgyro_ql.expand_dims({"mode": 2}, axis=[1]).copy()
     # Set subdominant mode to zero
     QL_data.loc[dict(mode=1)].data.fill(0)
+    print(QL_data.sum(axis=(1, 3)).sum(axis=0))
     # Need to reorder ions from D, C, e- to e-, D, C:
     QL_data = QL_data.roll(species=1, roll_coords=True)
 
@@ -1140,11 +1147,43 @@ def calculate_QLGYRO_flux(runid, cgyro_freq, cgyro_ql, tglf_growth, sat_rule_in,
         ],
         axis=4,
     )
-
-    intensity_cgyro, QLA_P, QLA_E, QLA_O = intensity_sat(sat_rule_in, cgyro_kys, cgyro_gammas, kx0_e, 1, QL_data, **in0)
-    heat_flux_spectrum = np.sum(np.sum(cgyro_energy_QL, axis=1), axis=1) * intensity_cgyro * QLA_E
-    heat_flux_spectrum = np.sum(heat_flux_spectrum, axis=1)  # sum over fields
-
+    # NM = len(cgyro_energy_QL[0, :, 0, 0])  # get the number of modes
+    # NS = len(cgyro_energy_QL[0, 0, :, 0])  # get the number of species
+    # NF = len(cgyro_energy_QL[0, 0, 0, :])  # get the number of fields
+    # intensity_cgyro, QLA_P, QLA_E, QLA_O = intensity_sat(sat_rule_in, cgyro_kys, cgyro_gammas, kx0_e, 1, QL_data, **in0)
+    # shapes = [item.shape for item in [cgyro_particle_QL, cgyro_energy_QL, cgyro_stresstor_QL, np.zeros(cgyro_stresstor_QL.shape), np.zeros(cgyro_stresstor_QL.shape)] if item is not None][0]
+    # particle = np.zeros(shapes)
+    # energy = np.zeros(shapes)
+    # toroidal_stress = np.zeros(shapes)
+    # parallel_stress = np.zeros(shapes)
+    # exchange = np.zeros(shapes)
+    # heat_flux_spectrum = np.sum(np.sum(cgyro_energy_QL, axis=1), axis=1) * intensity_cgyro * QLA_E
+    # heat_flux_spectrum = np.sum(heat_flux_spectrum, axis=1)  # sum over fields
+    # # particle[:, :, i, j] = particle_QL[:, :, i, j] * intensity_cgyro * QLA_P
+    # for i in range(NS):  # iterate over the species
+    #     for j in range(NF):  # iterate over the fields
+    #         if cgyro_particle_QL is not None:
+    #             particle[:, :, i, j] = cgyro_particle_QL[:, :, i, j] * intensity_cgyro * QLA_P
+    #         if cgyro_energy_QL is not None:
+    #             energy[:, :, i, j] = cgyro_energy_QL[:, :, i, j] * intensity_cgyro * QLA_E
+    #         if cgyro_stresstor_QL is not None:
+    #             toroidal_stress[:, :, i, j] = cgyro_stresstor_QL[:, :, i, j] * intensity_cgyro * QLA_O
+    #         if np.zeros(cgyro_stresstor_QL.shape) is not None:
+    #             parallel_stress[:, :, i, j] = np.zeros(cgyro_stresstor_QL.shape)[:, :, i, j] * intensity_cgyro * QLA_O
+    #         if np.zeros(cgyro_stresstor_QL.shape) is not None:
+    #             exchange[:, :, i, j] = np.zeros(cgyro_stresstor_QL.shape)[:, :, i, j] * intensity_cgyro * QLA_O
+    # # cgyro_sat['energy_flux_integral'] dimensions are: nmodes, ns, nfield
+    # cgyro_satG = np.sum(np.sum(particle, axis=(1, 3)), axis=0)
+    # cgyro_satQ = np.sum(np.sum(energy, axis=(1, 3)), axis=0)
+    # cgyro_satP = np.sum(np.sum(toroidal_stress, axis=(1, 3)), axis=0)
+    # flux_matrix = np.stack([cgyro_satG, cgyro_satQ, cgyro_satP], axis=1)  # shape: (ns, 3)
+    # # now start converting to the interested fluxes: Ge,Qe,Qi,Pi, per wavenumber
+    
+    # G_elec = flux_matrix[0, 0]
+    # Q_elec = flux_matrix[0, 1] 
+    # Q_ions = np.sum(flux_matrix[1:, 1], axis=0)
+    # P_ions = np.sum(flux_matrix[1:, 2], axis=0)
+    # print(G_elec, Q_elec, Q_ions, P_ions)
 
     cgyro_sat = sum_ky_spectrum(
         sat_rule_in,  #
@@ -1162,20 +1201,22 @@ def calculate_QLGYRO_flux(runid, cgyro_freq, cgyro_ql, tglf_growth, sat_rule_in,
         **in0,
     )
 
-    
-    print(cgyro_sat.keys())
     # cgyro_sat['energy_flux_integral'] dimensions are: nmodes, ns, nfield
     cgyro_satG = np.sum(np.sum(cgyro_sat["particle_flux_integral"], axis=2), axis=0)
     cgyro_satQ = np.sum(np.sum(cgyro_sat["energy_flux_integral"], axis=2), axis=0)
     cgyro_satP = np.sum(np.sum(cgyro_sat["toroidal_stresses_integral"], axis=2), axis=0)
-    flux_matrix = np.stack([cgyro_satG, cgyro_satQ, cgyro_satP], axis=1)  # shape: (3, 3)
+
+    cgyro_sum_flux_spectrum =  cgyro_sat["sum_flux_spectrum"]
+
+    flux_matrix = np.stack([cgyro_satG, cgyro_satQ, cgyro_satP], axis=1)  # shape: (ns, 3)
     # now start converting to the interested fluxes: Ge,Qe,Qi,Pi, per wavenumber
-    G_elec_per_ky = flux_matrix[0, 0]  # (size,nky,)
-    Q_elec_per_ky = flux_matrix[0, 1]  # (size,nky,)
-    Q_ions_per_ky = np.sum(flux_matrix[1:, 1], axis=0)
-    P_ions_per_ky = np.sum(flux_matrix[1:, 2], axis=0)
+    G_elec = flux_matrix[0, 0]
+    Q_elec = flux_matrix[0, 1] 
+    Q_ions = np.sum(flux_matrix[1:, 1], axis=0)
+    P_ions = np.sum(flux_matrix[1:, 2], axis=0)
     # cat them tobe (size, nky, 4)
-    return (G_elec_per_ky, Q_elec_per_ky, Q_ions_per_ky, P_ions_per_ky)
+    
+    return (G_elec, Q_elec, Q_ions, P_ions), cgyro_sum_flux_spectrum
 
 
     
@@ -1186,81 +1227,288 @@ import numpy as np
 from omfit_classes.omfit_gacode import OMFITcgyro
 from xarray import DataArray
 
-def load_cgyro_scan(root_dir):
-    # Step 1: Collect subdirectories representing different ky points
-    def extract_ky_index(name):
-        try:
-            return int(name.split("_")[1])
-        except (IndexError, ValueError):
-            return float("inf")  # Push malformed names to the end
+def run_converged(outputs):
+    """
+    This script determines if a run is converged
+    """
+    converged = False
 
-    ky_dirs = sorted([
-        os.path.join(root_dir, d) for d in os.listdir(root_dir)
-        if os.path.isdir(os.path.join(root_dir, d)) and d.startswith("ky_")
-    ], key=lambda d: extract_ky_index(os.path.basename(d)))
-    ql_flux_list = []
+    if 'gyro' in outputs and isinstance(outputs['gyro'], OMFITgyro) and 'out.gyro.run' in outputs['gyro']:
+        with open(outputs['gyro']['out.gyro.run'].filename) as runtext:
+            lines = runtext.readlines()
+        status = ''
+        for line in lines:
+            if 'STATUS' in line:
+                status = line.split(':')[1].strip()
+
+        if status == 'converged':
+            converged = True
+        else:
+            converged = False
+
+    if 'cgyro' in outputs and isinstance(outputs['cgyro'], OMFITcgyro) and 'out.cgyro.info' in outputs['cgyro']:
+        with open(outputs['cgyro']['out.cgyro.info'].filename) as runtext:
+            lines = runtext.readlines()
+        status = ''
+        for line in lines:
+            if 'EXIT' in line:
+                status = line.split(':')[1].strip()
+
+        if 'converged' in status:
+            converged = True
+        else:
+            converged = False
+
+    return converged
+
+def get_fluxes(outputs, w=0.2, u='gB', n=None, sumfields=True):
+    """
+    Get or calculate the quasi-linear or nonlinear transport flux for particles, energy and momentum
+    """
+
+    # Determine if this run is converged (general to GYRO and CGYRO)
+    converged = run_converged(outputs=outputs)
+
+    # Determine the code
+    if 'gyro' in outputs and isinstance(outputs['gyro'], OMFITgyro) and 'nonlinear_run' in outputs['gyro']:
+        code = 'gyro'
+    if 'cgyro' in outputs and isinstance(outputs['cgyro'], OMFITcgyro) and 'nonlinear_run' in outputs['cgyro']:
+        code = 'cgyro'
+
+    # Determine if the run is linear or nonlinear
+    if outputs[code]['nonlinear_run']:
+        if code == 'gyro':
+            flux_key = 'flux_r'
+        else:
+            flux_key = 'flux_t'
+    else:
+        flux_key = 'qlflux_ky'
+
+    # Determine the number of species
+    if code == 'gyro':
+        n_species = outputs['gyro']['profile']['n_kinetic']
+    elif code == 'cgyro':
+        n_species = outputs['cgyro']['n_species']
+
+    # Set the names of the moments
+    moments = ['particle', 'energy', 'momentum']
+
+    # Pre-allocate the fluxes
+    if sumfields:
+        fluxes = np.zeros((n_species, len(moments)))
+    else:
+        fluxes = np.zeros((n_species, 3, len(moments)))
+
+    # Set the units and tags
+    if u == 'gB':
+        unit = np.repeat(1.0, 3)
+
+        if n is None:
+            tagmoms = ['\Gamma/\Gamma_{gB}', 'Q/Q_{gB}', '\Pi/\Pi_{gB}']
+        elif n == 'Qe':
+            tagmoms = ['(\Gamma/\Gamma_{gB})/(Q_e/Q_{gB})', '(Q/Q_{gB})/(Q_e/Q_{gB})', '(\Pi/\Pi_{gB})/(Q_e/Q_{gB})']
+        elif n == 'Qi':
+            tagmoms = ['(\Gamma/\Gamma_{gB})/(Q_i/Q_{gB})', '(Q/Q_{gB})/(Q_i/Q_{gB})', '(\Pi/\Pi_{gB})/(Q_i/Q_{gB})']
+    elif u == 'MKS':
+        if code == 'gyro':
+            unit = np.array(
+                [outputs['gyro']['units']['Gamma_gBD'] * 0.624 * 1e3, outputs['gyro']['units']['Q_gBD'], outputs['gyro']['units']['Pi_gBD']]
+            )
+        elif code == 'cgyro':
+            unit = np.array(
+                [
+                    outputs['cgyro']['units']['gamma_gb_norm'],
+                    outputs['cgyro']['units']['q_gb_norm'],
+                    outputs['cgyro']['units']['pi_gb_norm'],
+                ]
+            )
+
+        if n is None:
+            tagmoms = ['\Gamma(e19/m^2/s)', 'Q(MW/m^2)', '\Pi(Nm/m^2)']
+        elif n == 'Qe':
+            tagmoms = ['\Gamma(e19/s)/Q_e(MW)', 'Q/Q_e', '\Pi(Nm)/Q_e(MW)']
+        elif n == 'Qi':
+            tagmoms = ['\Gamma(e19/s)/Q_i(MW)', 'Q/Q_i', '\Pi(Nm)/Q_i(MW)']
+
+    # Compute the fluxes in gB units
+    if sumfields:
+        for imom, mom in enumerate(moments):
+            for ispec in range(n_species):
+                if outputs[code]['nonlinear_run']:
+                    fluxes[ispec, imom] = (
+                        outputs[code][flux_key][mom]
+                        .sum(dim='field')
+                        .isel(species=ispec)
+                        .where(outputs[code][flux_key][mom]['t'] >= (1.0 - w) * outputs[code][flux_key][mom]['t'].max(), drop=True)
+                        .mean()
+                        .values
+                    )
+                else:
+                    if converged:
+                        fluxes[ispec, imom] = outputs[code][flux_key][mom].sum(dim='field').isel(species=ispec).values[-1]
+                    else:
+                        fluxes[ispec, imom] = (
+                            outputs[code][flux_key][mom]
+                            .sum(dim='field')
+                            .isel(species=ispec)
+                            .where(outputs[code][flux_key][mom]['t'] >= (1.0 - w) * outputs[code][flux_key][mom]['t'].max(), drop=True)
+                            .mean()
+                            .values
+                        )
+    else:
+        for f in range(3):
+            if f < 2:
+                for imom, mom in enumerate(moments):
+                    for ispec in range(n_species):
+                        if outputs[code]['nonlinear_run']:
+                            fluxes[ispec, imom] = (
+                                outputs[code][flux_key][mom]
+                                .isel(species=ispec)
+                                .where(outputs[code][flux_key][mom]['t'] >= (1.0 - w) * outputs[code][flux_key][mom]['t'].max(), drop=True)
+                                .mean()
+                                .values
+                            )
+                        else:
+                            if converged:
+                                fluxes[ispec, f, imom] = outputs[code][flux_key][mom].isel(species=ispec, field=f).values[-1]
+                            else:
+                                fluxes[ispec, f, imom] = (
+                                    outputs[code][flux_key][mom]
+                                    .isel(species=ispec, field=f)
+                                    .where(
+                                        outputs[code][flux_key][mom]['t'] >= (1.0 - w) * outputs[code][flux_key][mom]['t'].max(), drop=True
+                                    )
+                                    .mean()
+                                    .values
+                                )
+
+    # Perform the unit and normalization across the moment dimension
+    if n == 'Qe':
+        # If we normalize by Qe then we compute Qe in desired units
+        # Then our factor is the units for all fluxes / Qe in those units
+        # This makes Qe = 1 in chosen units
+        Qe = fluxes[-1, 1] * unit[1]
+        factor = unit / Qe
+    elif n == 'Qi':
+        Qi = fluxes[0, 1] * unit[1]
+        factor = unit / Qi
+    else:
+        factor = unit
+
+    # Apply along the flux axis for all species
+    fluxes *= factor[np.newaxis, :]
+
+    return fluxes, tagmoms, factor
+
+
+import numpy as np
+import xarray as xr
+
+# Assume `outputs` is a dict like:
+# {'particle': DataArray, 'energy': DataArray, 'momentum': DataArray}
+# And `code`, `flux_key`, `w` are predefined
+
+import numpy as np
+
+def extract_flux_matrix(outputs, w=0.2):
+    moments = ['particle', 'energy', 'momentum']
+    example_da = outputs[moments[0]]
+
+    nspec = example_da.sizes['species']
+    nfield = example_da.sizes['field']
+    nmom = len(moments)
+
+    fluxes = np.zeros((nspec, nfield, nmom), dtype=np.float64)
+
+    for imom, mom in enumerate(moments):
+        da = outputs[mom]
+        t_thresh = (1.0 - w) * da['t'].max()
+
+        for ispec in range(nspec):
+            for f in range(nfield):
+                fluxes[ispec, f, imom] = (
+                    da.isel(species=ispec, field=f)
+                      .where(da['t'] >= t_thresh, drop=True)
+                      .mean()
+                      .values
+                )
+    return fluxes
+
+def load_cgyro_scan(root_dir):
+    import re
+
+    def extract_ky_index(name):
+        match = re.search(r'-(\d+)$', name)
+        return int(match.group(1)) if match else float("inf")
+
+    dirs = [
+        d for d in os.listdir(root_dir)
+        if os.path.isdir(os.path.join(root_dir, d))
+    ]
+    dirs_sorted = sorted(dirs, key=extract_ky_index)
+
     ky_vals = []
     gamma_vals = []
     omega_vals = []
+    ql_fluxes = []
     species_names = None
     bt_sign = None
+    failed_indices = []  # <-- ADD THIS
 
-    # Step 2: Load each CGYRO run
-    for d in ky_dirs:
-        gyro = OMFITcgyro(d)
-        gyro.load()
+    for idx, dname in enumerate(dirs_sorted):
+        print(f"📂 Processing {dname}")
+        d = os.path.join(root_dir, dname)
 
-        if 'freq' not in gyro:
-            print(f"⚠️ Skipping {d}: missing 'freq'")
+        try:
+            gyro = OMFITcgyro(d)
+            gyro.load()
+
+            if 'freq' not in gyro:
+                print(f"⚠️ Skipping {dname}: missing 'freq'")
+                failed_indices.append(idx)
+                continue
+
+            gamma_arr = gyro['freq']['gamma']
+            omega_arr = gyro['freq']['omega']
+            ky = gamma_arr.coords["ky"].values[0]
+
+            gamma = gamma_arr.isel(ky=0, t=-1).item()
+            if gamma <= 0:
+                print(f"🔇 Skipping {dname}: gamma <= 0 ({gamma})")
+                failed_indices.append(idx)
+                continue
+
+            omega = omega_arr.isel(ky=0, t=-1).item()
+
+            ky_vals.append(-1 * ky)  # Reverse ky sign
+            gamma_vals.append(gamma)
+            omega_vals.append(omega)
+
+            if species_names is None:
+                species_names = list(gyro['species_tags'])
+            if bt_sign is None and 'units' in gyro:
+                bt = gyro['units'].get('bt0', 1.0)
+                bt_sign = bt / abs(bt)
+
+            outputs = {"cgyro": gyro}
+            fluxes, tagmoms, factor = get_fluxes(outputs, sumfields=False)
+            ql_fluxes.append(fluxes * ky)
+        except Exception as e:
+            print(f"❌ Failed to load {dname}: {e}")
+            failed_indices.append(idx)
             continue
 
-        gamma_arr = gyro['freq']['gamma']
-        omega_arr = gyro['freq']['omega']
-        
-        # Take the last time value at ky=0
-        gamma = gamma_arr.isel(ky=0, t=-1).item()
-        omega = omega_arr.isel(ky=0, t=-1).item()
-
-        if gamma <= 0:
-            print("parsed due to neg gamma")
-            continue  # Skip stable or decaying modes
-
-
-        gamma_vals.append(gamma)
-        omega_vals.append(omega)
-
-        # Get ky value as scalar
-        ky = gamma_arr.coords["ky"].values[0]
-        # Extract the last time slice for each moment and stack them
-        qlflux_moments = []
-        for moment in ['particle', 'energy', 'momentum']:
-            qlflux_timed = gyro['qlflux_ky'][moment]  # shape: (species, field, t)
-            qlflux_last = qlflux_timed.isel(t=-1).data  # shape: (species, field)
-            qlflux_moments.append(qlflux_last)
-
-        # Stack into shape (species, field, moment)
-        qlflux = np.stack(qlflux_moments, axis=-1)
-
-        # Scale by ky and append
-        ql_flux_list.append(qlflux * ky)
-        ky_vals.append(ky)
-
-        # Save metadata once
-        if species_names is None:
-            species_names = list(gyro['species_tags'])
-
-        if bt_sign is None and 'units' in gyro:
-            bt = gyro['units'].get('bt0', 1.0)
-            bt_sign = bt / abs(bt)
-
     return {
-        "ql_flux": np.array(ql_flux_list),
-        "ky": np.array(ky_vals) * -1,
+        "ql_flux": np.array(ql_fluxes),  # shape: (valid_ky, ns, nf, 3)
+        "ky": np.array(ky_vals),
         "gamma": np.array(gamma_vals),
         "omega": np.array(omega_vals),
         "species_names": species_names,
-        "bt_sign": bt_sign
+        "bt_sign": bt_sign,
+        "failed_indices": failed_indices,
+        "total_count": len(dirs_sorted)
     }
+
 
 def package_as_dataarray(ql_flux, ky_vals, species_names, bt_sign):
     nky = len(ky_vals)
@@ -1299,9 +1547,10 @@ def parse_tglf_input_file(filepath):
 
             try:
                 key, val = map(str.strip, line.split("="))
-                if val.lower() in ("true", ".true."):
+                val_lower = val.lower()
+                if val_lower in ("true", ".true.", "t"):
                     in0[key] = True
-                elif val.lower() in ("false", ".false."):
+                elif val_lower in ("false", ".false.", "f"):
                     in0[key] = False
                 else:
                     in0[key] = float(val)
@@ -1327,10 +1576,9 @@ def run_qlgyro_flux_from_dir(
 ):
     # Step 1: Load CGYRO outputs
     cgyro_data = load_cgyro_scan(root_dir)
-    print(cgyro_data["ky"])
     if len(cgyro_data["ky"]) == 0:
         print("❌ No valid CGYRO runs found.")
-        return {}
+        return {}, [], [], 0  # Return empty if nothing loaded
 
     # Step 2: Package into xarray
     ql_data = package_as_dataarray(
@@ -1345,7 +1593,6 @@ def run_qlgyro_flux_from_dir(
     bt_exp = in0.get("BT_EXP", 1.0)
 
     # Patch BT_EXP into freq container
-    from xarray import DataArray
     cgyro_freq = DataArray(
         data=np.stack([cgyro_data["ky"], cgyro_data["gamma"], cgyro_data["omega"]], axis=1),
         dims=["ky", "dim"],
@@ -1353,140 +1600,104 @@ def run_qlgyro_flux_from_dir(
         attrs={"BT_EXP": bt_exp}
     )
 
-    # Use CGYRO gammas for now as a placeholder for tglf_growth
     tglf_growth = cgyro_freq.sel(dim="gamma")
 
     results = defaultdict(list)
 
     for sat_rule in sat_rules:
         print(f"\n▶ Running QLGYRO with SAT{sat_rule}")
-        (
-            f1, f2, f3, f4
-        ) = calculate_QLGYRO_flux(
+        results[sat_rule] = calculate_QLGYRO_flux(
             runid="cgyro_dir",
             cgyro_freq=cgyro_freq,
             cgyro_ql=ql_data,
             tglf_growth=tglf_growth,
             sat_rule_in=sat_rule,
             alpha_zf_in=alpha_zf_in,
-            in0 = in0
+            in0=in0
         )
-    print(f1, f2, f3, f4)
-    return results
 
-def load_cgyro_scan_with_ky_flux(root_dir):
-    # This is only for non-linear runs.
-    def extract_ky_index(name):
-        try:
-            return int(name.split("_")[1])
-        except (IndexError, ValueError):
-            return float("inf")
+    return (
+        results,
+        cgyro_data["ky"],               # valid ky values
+        cgyro_data["failed_indices"],  # failed ky indices
+        cgyro_data["total_count"],     # total ky runs attempted
+    )
 
-    ky_dirs = sorted([
-        os.path.join(root_dir, d) for d in os.listdir(root_dir)
-        if os.path.isdir(os.path.join(root_dir, d)) and d.startswith("ky_")
-    ], key=lambda d: extract_ky_index(os.path.basename(d)))
+import h5py
+import os
 
-    flux_per_ky = []
-    ky_vals = []
-    gamma_vals = []
-    omega_vals = []
-    species_names = None
-    bt_sign = None
+def extract_batch_index(path):
+    """Extract integer batch index from a path like .../batch-000/cgyro"""
+    basename = os.path.basename(os.path.dirname(path))  # e.g., "batch-000"
+    if "batch-" in basename:
+        return int(basename.replace("batch-", ""))
+    raise ValueError(f"Could not extract batch index from path: {path}")
 
-    for d in ky_dirs:
-        gyro = OMFITcgyro(d)
-        gyro.load()
-        with open(gyro['out.cgyro.info'].filename) as runtext:
-            lines = runtext.readlines()
-        status = ''
-        for line in lines:
-            print(line)
-            if 'EXIT' in line:
-                status = line.split(':')[1].strip()
-        print(status)
-        if 'converged' in status:
-            converged = True
-        else:
-            converged = False
-        print(converged, "HAIYAAAAA")
-        if "freq" not in gyro or "flux_ky" not in gyro:
-            continue
+def print_outputs_from_h5(h5_path, batch_idx):
+    keys = ["OUT_G_elec", "OUT_Q_elec", "OUT_Q_ions", "OUT_P_ions"]
+    with h5py.File(h5_path, "r") as f:
+        print(f"\n📦 Values from index {batch_idx} in {os.path.basename(h5_path)}:")
+        for key in keys:
+            if key in f:
+                data = f[key]
+                if batch_idx < len(data):
+                    print(f"{key}: {data[batch_idx]}")
+                else:
+                    print(f"{key}: ❌ index {batch_idx} out of range (size={len(data)})")
+            else:
+                print(f"{key}: ❌ key not found")
+        ql = f["ql"][0][:]
+        ky = f["ky"][0][:]
 
-        gamma_arr = gyro["freq"]["gamma"]
-        omega_arr = gyro["freq"]["omega"]
-        gamma = gamma_arr.isel(ky=0, t=-1).item()
-        omega = omega_arr.isel(ky=0, t=-1).item()
-        # if gamma <= 0:
-        #     print(f"⏭️ Skipped {d} due to non-positive gamma: {gamma}")
-        #     continue
+        # Shape: (nky, 5, 2, 3, 5)
+        matrix = ql.sum(axis=2)
 
-        gamma_vals.append(gamma)
-        omega_vals.append(omega)
+        # Reshape ky for broadcasting
+        ky_expanded = ky[:, None, None, None]
 
-        ky = gamma_arr.coords["ky"].values[0]
-        ky_vals.append(ky)
-
-        qlflux_moments = []
-        for moment in ["particle", "energy", "momentum"]:
-            qlflux_timed = gyro["flux_ky"][moment]  # (species, field, t)
-            qlflux_last = qlflux_timed.isel(t=-1).data  # (species, field)
-            qlflux_moments.append(qlflux_last)  # append (species, field)
-
-        # Stack into (species, field, moment)
-        flux_tensor = np.stack(qlflux_moments, axis=-1)  # (species, field, moment)
-        flux_per_ky.append(flux_tensor)
-
-        if species_names is None:
-            species_names = list(gyro["species_tags"])
-        if bt_sign is None and "units" in gyro:
-            bt = gyro["units"].get("bt0", 1.0)
-            bt_sign = bt / abs(bt)
-
-    if not flux_per_ky:
-        print("❌ No valid CGYRO runs found.")
-        return {}
-
-    flux_per_ky = np.stack(flux_per_ky, axis=-1)  # (species, field, moment, nky)
-    flux_matrix = flux_per_ky.squeeze()  # alias
-    # === Compute Flux Spectra ===
-    G_elec_per_ky = np.sum(flux_matrix[0, 0, 0, :], axis=0)         # species 0, field 0, particle
-    Q_elec_per_ky = np.sum(flux_matrix[0, :, 1, :], axis=0)         # species 0, all fields, energy
-    Q_ions_per_ky = np.sum(np.sum(flux_matrix[1:, :, 1, :], axis=1), axis=0)  # ions, all fields, energy
-    P_ions_per_ky = np.sum(np.sum(flux_matrix[1:, :, 2, :], axis=1), axis=0)  # ions, all fields, momentum
-
-    # === Total Fluxes ===
-    total_fluxes = np.array([
-        np.sum(G_elec_per_ky),
-        np.sum(Q_elec_per_ky),
-        np.sum(Q_ions_per_ky),
-        np.sum(P_ions_per_ky),
-    ])
-
-    return {
-        "spectra": {
-            "G_elec_per_ky": G_elec_per_ky,
-            "Q_elec_per_ky": Q_elec_per_ky,
-            "Q_ions_per_ky": Q_ions_per_ky,
-            "P_ions_per_ky": P_ions_per_ky,
-        },
-        "total_fluxes": total_fluxes,  # shape (4,)
-        "ky": np.array(ky_vals) * -1,
-        "gamma": np.array(gamma_vals),
-        "omega": np.array(omega_vals),
-        "species_names": species_names,
-        "bt_sign": bt_sign,
-    }
-
-
+        # Multiply
+        weighted_matrix = (ky_expanded * matrix)
 
 if __name__ == "__main__":
-    cgyro_scan = "/global/homes/w/wyl002/Github/ai-fusion-gknn-wesley/tglf_outputs/tglf_input_20250720_145102/sample_4"
-    input_tglf_file = "/global/homes/w/wyl002/Github/ai-fusion-gknn-wesley/tglf_outputs/tglf_input_20250720_145102/sample_4/ky_0/input.tglf"
-    # data = load_cgyro_scan_with_ky_flux(cgyro_scan)
-    results = run_qlgyro_flux_from_dir(
-    root_dir=cgyro_scan,
-    tglf_input_path=input_tglf_file,
-    sat_rules=(2, 3),
-    alpha_zf_in=1.0
+    cgyro_scan = "/Users/wesleyliu/Documents/Github/ai-fusion-gknn-wesley/envs/test_outputs/batch-008/cgyro"
+    input_tglf_file = "/Users/wesleyliu/Documents/Github/gacode-docker/cgyro_inputs/batch-000/tglf/input-008/input.tglf"
+    h5_file = "/Users/wesleyliu/Documents/Github/ai-fusion-gknn-wesley/envs/output_parsing/sampled_output_file.h5"
+
+    # Run QLGYRO with both SAT2 and SAT3
+    results, kys_valid, failed_indices, total_count = run_qlgyro_flux_from_dir(
+        root_dir=cgyro_scan,
+        tglf_input_path=input_tglf_file,
+        sat_rules=(2, 3),
+        alpha_zf_in=1.0
     )
+
+    sat2_fluxes, sat2_sumf = results[2]
+    sat3_fluxes, sat3_sumf = results[3]
+
+    # Print scalar fluxes
+    flux_labels = ["G_e", "Q_e", "Q_i", "P_i"]
+    print("\n🔬 Fluxes (SAT2):")
+    for label, val in zip(flux_labels, sat2_fluxes):
+        print(f"  {label}: {val:.6f}")
+
+    print("\n🔬 Fluxes (SAT3):")
+    for label, val in zip(flux_labels, sat3_fluxes):
+        print(f"  {label}: {val:.6f}")
+
+    # (Optional) HDF5 comparison
+    batch_index = extract_batch_index(cgyro_scan)
+    print_outputs_from_h5(h5_file, batch_index)
+
+
+    # Handle padding of sumf arrays and ky
+    valid_indices = [i for i in range(total_count) if i not in failed_indices]
+    shape = sat2_sumf.shape[1:]  # (ns, nf, 3)
+    sat2_full = np.zeros((total_count,) + shape)
+    sat3_full = np.zeros((total_count,) + shape)
+    full_kys = np.zeros(total_count)
+
+    for new_idx, original_idx in enumerate(valid_indices):
+        sat2_full[original_idx] = sat2_sumf[new_idx]
+        sat3_full[original_idx] = sat3_sumf[new_idx]
+        full_kys[original_idx] = kys_valid[new_idx]
+    print("✅ Completed with zero-padding for failed runs")

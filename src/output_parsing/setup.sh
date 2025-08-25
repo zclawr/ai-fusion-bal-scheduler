@@ -28,6 +28,8 @@ else
     echo "📁 Directory '$OMFIT_DIR' already exists. Skipping clone."
 fi
 
+conda install -c conda-forge hdf5
+conda install -c conda-forge netcdf4
 # Step 4: Poetry install
 echo "📦 Installing dependencies using Poetry..."
 poetry install
