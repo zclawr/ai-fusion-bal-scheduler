@@ -65,11 +65,14 @@ def append_to_h5_individual_keys(h5_path, input_dict, fluxes, sumf, ky, meta=Non
                 f[name][-1] = data
 
         # === Save flux vector (G_e, Q_e, Q_i, P_i)
-        if "fluxes" not in f:
-            f.create_dataset("fluxes", data=fluxes[None, :], maxshape=(None, fluxes.shape[-1]), chunks=True)
-        else:
-            f["fluxes"].resize((f["fluxes"].shape[0] + 1), axis=0)
-            f["fluxes"][-1] = fluxes
+        flux_names = ["OUT_G_e", "OUT_Q_e", "OUT_Q_i", "OUT_P_i"]
+        for i, name in enumerate(flux_names):
+            val = np.float32(fluxes[i])
+            if name not in f:
+                f.create_dataset(name, data=[val], maxshape=(None,), chunks=True)
+            else:
+                f[name].resize((f[name].shape[0] + 1), axis=0)
+                f[name][-1] = val
 
         # === Save sumf matrix: (1, total_count, ns, nf, 3)
         if "sumf" not in f:
