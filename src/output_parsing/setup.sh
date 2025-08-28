@@ -5,7 +5,7 @@ set -e
 
 # Variables
 OMFIT_BRANCH="xarray-fix"
-OMFIT_REPO_URL="git@github.com:wesleyliu728/OMFIT-source.git" #"https://github.com/wesleyliu728/OMFIT-source.git"  # Replace with your fork
+OMFIT_REPO_URL="https://github.com/wesleyliu728/OMFIT-source.git"  # Replace with your fork
 OMFIT_DIR="OMFIT-source"
 
 # Step 1: Create or update conda environment
@@ -30,6 +30,12 @@ fi
 
 conda install -c conda-forge hdf5
 conda install -c conda-forge netcdf4
+# Compilers (C, C++, Fortran) + build tools
+conda install -c conda-forge compilers make cmake
+
+# Linear algebra / math libraries
+conda install -c conda-forge openblas lapack fftw
+
 # Step 4: Poetry install
 echo "📦 Installing dependencies using Poetry..."
 poetry install
