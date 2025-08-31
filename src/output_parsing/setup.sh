@@ -5,7 +5,7 @@ set -e
 
 # Variables
 OMFIT_BRANCH="xarray-fix"
-OMFIT_REPO_URL="https://github.com/wesleyliu728/OMFIT-source.git"  # Replace with your fork
+OMFIT_REPO_URL="git@github.com:wesleyliu728/OMFIT-source.git" # Replace with your fork
 OMFIT_DIR="OMFIT-source"
 
 # Step 1: Create or update conda environment
